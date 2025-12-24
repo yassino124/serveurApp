@@ -7,13 +7,21 @@ import {
   Logger,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, isValidObjectId } from 'mongoose';
 import * as bcrypt from 'bcrypt';
 import { User, UserDocument, AccountStatus } from './user.schema';
+import { Reel, ReelDocument, ReelStatus } from '../reels/reel.schema';
+import {
+  Restaurant,
+  RestaurantDocument,
+} from '../restaurants/restaurant.schema';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { ChangeEmailDto } from './dto/change-email.dto';
 import { DeleteAccountDto } from './dto/delete-account.dto';
+import { SetProfilePictureDto } from './dto/set-profile-picture.dto';
+import { join, isAbsolute } from 'path';
+import * as fs from 'fs';
 
 @Injectable()
 export class UsersService {
@@ -21,7 +29,24 @@ export class UsersService {
 
   constructor(
     @InjectModel(User.name) private userModel: Model<UserDocument>,
+    @InjectModel(Reel.name) private reelModel: Model<ReelDocument>,
+    @InjectModel(Restaurant.name)
+    private restaurantModel: Model<RestaurantDocument>,
   ) {}
+
+  private async findUserOrThrow(userIdentifier: string) {
+    let user = await this.userModel.findOne({ user_id: userIdentifier }).exec();
+
+    if (!user && isValidObjectId(userIdentifier)) {
+      user = await this.userModel.findById(userIdentifier).exec();
+    }
+
+    if (!user) {
+      throw new NotFoundException('Utilisateur non trouvé');
+    }
+
+    return user;
+  }
 
   // ✅ 1. Voir son profil complet
   async getProfile(userId: string) {
@@ -35,6 +60,59 @@ export class UsersService {
     }
 
     return user;
+  }
+
+  // ✅ 1.b Récupérer le nom/username via un ID utilisateur (UUID ou ObjectId)
+  async getUserNameById(userIdentifier: string) {
+    const user = await this.findUserOrThrow(userIdentifier);
+
+    return {
+      user_id: user.user_id,
+      username: user.username,
+      full_name: user.full_name,
+    };
+  }
+
+  async getUserReels(userIdentifier: string) {
+    const user = await this.findUserOrThrow(userIdentifier);
+
+    const reels = await this.reelModel
+      .find({
+        user_id: user._id,
+        status: { $ne: ReelStatus.DELETED },
+      })
+      .sort({ created_at: -1 })
+      .populate('user_id', 'user_id username full_name profile_picture role')
+      .exec();
+
+    return {
+      user: {
+        user_id: user.user_id,
+        username: user.username,
+        full_name: user.full_name,
+      },
+      total: reels.length,
+      reels,
+    };
+  }
+
+  async getUserRestaurants(userIdentifier: string) {
+    const user = await this.findUserOrThrow(userIdentifier);
+
+    const restaurants = await this.restaurantModel
+      .find({ ownerId: user.user_id })
+      .sort({ createdAt: -1 })
+      .exec();
+
+    return {
+      user: {
+        user_id: user.user_id,
+        username: user.username,
+        full_name: user.full_name,
+      },
+      total: restaurants.length,
+      restaurants,
+    };
   }
 
   // ✅ 2. Mettre à jour le profil (username, nom, bio, photo, catégories)
@@ -74,6 +152,111 @@ export class UsersService {
 
     const { password_hash, ...userWithoutPassword } = user.toObject();
     return userWithoutPassword;
+  }
+
+  // ✅ 2.b. Changer la photo de profil (URL externe ou image par défaut)
+  async setProfilePicture(
+    userId: string,
+    setPictureDto: SetProfilePictureDto,
+  ) {
+    const user = await this.userModel.findById(userId).exec();
+
+    if (!user) {
+      throw new NotFoundException('Utilisateur non trouvé');
+    }
+
+    // Vérifier qu'au moins un des deux champs est fourni
+    if (!setPictureDto.default_image && !setPictureDto.external_url) {
+      throw new BadRequestException(
+        'Vous devez fournir soit une URL externe, soit une image par défaut (p2, p3, p4, p5)',
+      );
+    }
+
+    // Vérifier qu'un seul des deux champs est fourni
+    if (setPictureDto.default_image && setPictureDto.external_url) {
+      throw new BadRequestException(
+        'Vous ne pouvez fournir qu\'une seule option : soit une URL externe, soit une image par défaut',
+      );
+    }
+
+    let profilePicturePath: string;
+
+    if (setPictureDto.default_image) {
+      // Construire le chemin vers l'image par défaut
+      // Les images sont servies via /uploads/profiles/pX.jpg
+      profilePicturePath = `profiles/${setPictureDto.default_image}.jpg`;
+    } else if (setPictureDto.external_url) {
+      // Utiliser l'URL externe directement
+      profilePicturePath = setPictureDto.external_url;
+    } else {
+      throw new BadRequestException('Aucune photo valide fournie');
+    }
+
+    // Mettre à jour la photo de profil
+    user.profile_picture = profilePicturePath;
+    await user.save();
+
+    this.logger.log(
+      `Profile picture updated for user: ${user.email} - ${profilePicturePath}`,
+    );
+
+    const { password_hash, ...userWithoutPassword } = user.toObject();
+    return userWithoutPassword;
+  }
+
+  // ✅ 2.c. Récupérer le chemin/URL de l'image de profil d'un utilisateur
+  async getUserProfilePicture(
+    userIdentifier: string,
+  ): Promise<
+    | { type: 'external'; url: string }
+    | { type: 'local'; path: string; relativePath: string }
+  > {
+    const user = await this.findUserOrThrow(userIdentifier);
+
+    if (!user.profile_picture) {
+      throw new NotFoundException('L\'utilisateur n\'a pas de photo de profil');
+    }
+
+    // Si c'est une URL externe, retourner l'URL
+    if (
+      user.profile_picture.startsWith('http://') ||
+      user.profile_picture.startsWith('https://')
+    ) {
+      return {
+        type: 'external',
+        url: user.profile_picture,
+      };
+    }
+
+    // Si c'est une image locale, construire le chemin complet
+    const uploadsDir = process.env.UPLOAD_PATH || './uploads';
+    let imagePath: string;
+
+    // Construire le chemin absolu
+    if (uploadsDir.startsWith('./') || !isAbsolute(uploadsDir)) {
+      // Chemin relatif, le convertir en absolu depuis process.cwd()
+      const absoluteUploadsDir = join(process.cwd(), uploadsDir.replace('./', ''));
+      imagePath = join(absoluteUploadsDir, user.profile_picture);
+    } else {
+      // Chemin absolu
+      imagePath = join(uploadsDir, user.profile_picture);
+    }
+
+    // Vérifier si le fichier existe
+    if (!fs.existsSync(imagePath)) {
+      this.logger.warn(
+        `Image introuvable pour l'utilisateur ${userIdentifier}: ${imagePath}`,
+      );
+      throw new NotFoundException(
+        'Image de profil introuvable sur le serveur',
+      );
+    }
+
+    return {
+      type: 'local',
+      path: imagePath,
+      relativePath: user.profile_picture,
+    };
   }
 
   // ✅ 3. Changer le mot de passe (avec vérification de l'ancien)

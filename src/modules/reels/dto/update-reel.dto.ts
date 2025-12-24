@@ -1,13 +1,13 @@
 // src/reels/dto/update-reel.dto.ts
 import { ApiProperty } from '@nestjs/swagger';
 import {
-  IsOptional,
   IsString,
   IsArray,
   IsEnum,
+  IsOptional,
   IsBoolean,
-  IsUrl,
   MaxLength,
+  IsUrl,
 } from 'class-validator';
 import { CuisineCategory } from '../../users/user.schema';
 import { ReelVisibility } from '../reel.schema';
@@ -15,18 +15,18 @@ import { Transform } from 'class-transformer';
 
 export class UpdateReelDto {
   @ApiProperty({
-    description: 'Nouvelle légende du reel',
-    example: "Nouvelle version améliorée de ma recette ! 🎉",
+    description: "Légende du reel",
+    example: "Nouvelle version de ma recette de couscous ! 🍲",
     required: false,
   })
   @IsOptional()
-  @IsString({ message: 'La légende doit être une chaîne de caractères' })
-  @MaxLength(500, { message: 'La légende ne peut pas dépasser 500 caractères' })
+  @IsString()
+  @MaxLength(500)
   caption?: string;
 
   @ApiProperty({
-    description: 'Nouveaux hashtags pour le reel',
-    example: ['nouvelle_recette', 'amélioration', 'food'],
+    description: 'Hashtags pour le reel',
+    example: ['couscous', 'recette', 'tunisie'],
     type: [String],
     required: false,
   })
@@ -42,8 +42,8 @@ export class UpdateReelDto {
   hashtags?: string[];
 
   @ApiProperty({
-    description: 'Nouvelles catégories culinaires',
-    example: ['tunisian', 'healthy'],
+    description: 'Catégories culinaires',
+    example: ['tunisian', 'mediterranean'],
     enum: CuisineCategory,
     isArray: true,
     required: false,
@@ -54,7 +54,7 @@ export class UpdateReelDto {
   categories?: CuisineCategory[];
 
   @ApiProperty({
-    description: 'Nouvelle localisation',
+    description: 'Localisation',
     example: 'Sousse, Tunisia',
     required: false,
   })
@@ -63,8 +63,8 @@ export class UpdateReelDto {
   location?: string;
 
   @ApiProperty({
-    description: 'Nouvelle URL de la miniature',
-    example: 'https://example.com/thumbnails/updated-reel-123.jpg',
+    description: 'URL de la miniature',
+    example: 'https://example.com/thumbnails/new-thumbnail-1234567890.jpg',
     required: false,
   })
   @IsOptional()
@@ -73,8 +73,8 @@ export class UpdateReelDto {
 
   @ApiProperty({
     enum: ReelVisibility,
-    example: ReelVisibility.FOLLOWERS_ONLY,
-    description: 'Nouvelle visibilité du reel',
+    example: ReelVisibility.PUBLIC,
+    description: 'Visibilité du reel',
     required: false,
   })
   @IsOptional()
@@ -82,16 +82,7 @@ export class UpdateReelDto {
   visibility?: ReelVisibility;
 
   @ApiProperty({
-    description: 'Réappliquer les fonctionnalités AI',
-    example: false,
-    required: false,
-  })
-  @IsOptional()
-  @IsBoolean()
-  ai_enhanced?: boolean;
-
-  @ApiProperty({
-    description: 'Musique/artiste du reel',
+    description: 'Piste musicale',
     example: 'Summer Vibes',
     required: false,
   })
@@ -100,11 +91,20 @@ export class UpdateReelDto {
   music_track?: string;
 
   @ApiProperty({
-    description: 'Artiste de la musique',
-    example: 'DJ Foodie',
+    description: 'Artiste musical',
+    example: 'DJ Food',
     required: false,
   })
   @IsOptional()
   @IsString()
   music_artist?: string;
+
+  @ApiProperty({
+    description: 'Utiliser les fonctionnalités AI pour la légende et hashtags',
+    example: true,
+    required: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  ai_enhanced?: boolean;
 }

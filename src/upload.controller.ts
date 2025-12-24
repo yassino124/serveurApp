@@ -1,19 +1,19 @@
-// src/upload/upload.controller.ts
+// src/modules/upload/upload.controller.ts
 import {
   Controller,
   Post,
-  UseInterceptors,
   UploadedFile,
+  UseInterceptors,
   UseGuards,
-  BadRequestException,
   Logger,
   HttpStatus,
-  HttpCode,
+  BadRequestException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { JwtAuthGuard } from './common/guards/jwt-auth.guard'; // Chemin relatif correct
-import { v4 as uuidv4 } from 'uuid';
-import { ApiConsumes, ApiBody, ApiTags, ApiBearerAuth } from '@nestjs/swagger';
+import { diskStorage } from 'multer';
+import { extname } from 'path';
+import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
+import { ApiTags, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
 
 @ApiTags('Upload')
 @ApiBearerAuth('JWT-auth')
@@ -23,8 +23,6 @@ export class UploadController {
   private readonly logger = new Logger(UploadController.name);
 
   @Post('video')
-  @HttpCode(HttpStatus.CREATED)
-  @UseInterceptors(FileInterceptor('file')) // Match Swift fieldName "file"
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {
@@ -37,108 +35,122 @@ export class UploadController {
       },
     },
   })
-  async uploadVideo(@UploadedFile() file: Express.Multer.File) {
-    this.logger.log('📤 Upload video request received');
-
-    try {
-      if (!file) {
-        throw new BadRequestException('No video file provided');
-      }
-
-      this.logger.log(`📹 File received: ${file.originalname}, Size: ${file.size} bytes, Type: ${file.mimetype}`);
-
-      // Validation du type de fichier
-      if (!file.mimetype.startsWith('video/')) {
-        throw new BadRequestException('File must be a video');
-      }
-
-      // Validation de la taille
-      const MAX_SIZE = 100 * 1024 * 1024; // 100MB
-      if (file.size > MAX_SIZE) {
-        throw new BadRequestException('File too large. Maximum size is 100MB');
-      }
-
-      // Générer des URLs simulées (à remplacer par votre logique cloud réelle)
-      const videoId = uuidv4();
-      const videoUrl = `https://your-storage-bucket.s3.amazonaws.com/videos/${videoId}.mp4`;
-      const thumbnailUrl = `https://your-storage-bucket.s3.amazonaws.com/thumbnails/${videoId}.jpg`;
-
-      this.logger.log(`✅ Video uploaded successfully: ${videoId}`);
-
-      return {
-        statusCode: HttpStatus.CREATED,
-        message: 'Video uploaded successfully',
-        data: {
-          video_url: videoUrl,
-          thumbnail_url: thumbnailUrl,
-          file_size: file.size,
-          mime_type: file.mimetype,
-          video_id: videoId,
-          original_name: file.originalname,
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: diskStorage({
+        destination: './uploads/videos',
+        filename: (req, file, callback) => {
+          const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+          const ext = extname(file.originalname);
+          const filename = `video-${uniqueSuffix}${ext}`;
+          callback(null, filename);
         },
-      };
-    } catch (error) {
-      this.logger.error(`Upload failed: ${error.message}`);
-      throw error;
+      }),
+      fileFilter: (req, file, callback) => {
+        if (!file.mimetype.startsWith('video/')) {
+          return callback(
+            new BadRequestException('Only video files are allowed'),
+            false,
+          );
+        }
+        callback(null, true);
+      },
+      limits: {
+        fileSize: 100 * 1024 * 1024, // 100MB
+      },
+    }),
+  )
+  async uploadVideo(@UploadedFile() file: Express.Multer.File) {
+    this.logger.log('📤 ============ VIDEO UPLOAD ============');
+    
+    if (!file) {
+      this.logger.error('❌ No file uploaded');
+      throw new BadRequestException('No file uploaded');
     }
+
+    this.logger.log(`📹 File received: ${file.originalname}`);
+    this.logger.log(`📏 Size: ${(file.size / 1024 / 1024).toFixed(2)} MB`);
+    this.logger.log(`📦 MIME type: ${file.mimetype}`);
+    this.logger.log(`💾 Saved as: ${file.filename}`);
+    this.logger.log(`📂 Path: ${file.path}`);
+
+    // ✅ CRITIQUE: Construire l'URL complète accessible
+    const baseURL = process.env.BASE_URL || 'http://localhost:3000';
+    const videoURL = `${baseURL}/uploads/videos/${file.filename}`;
+
+    this.logger.log(`🌐 Video URL: ${videoURL}`);
+    this.logger.log('✅ ============ UPLOAD SUCCESS ============');
+
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Video uploaded successfully',
+      data: {
+        video_url: videoURL,
+        thumbnail_url: null, // TODO: Générer une thumbnail
+        file_size: file.size,
+        mime_type: file.mimetype,
+        original_name: file.originalname,
+        video_id: file.filename,
+      },
+    };
   }
 
   @Post('thumbnail')
-  @HttpCode(HttpStatus.CREATED)
-  @UseInterceptors(FileInterceptor('thumbnail'))
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {
       type: 'object',
       properties: {
-        thumbnail: {
+        file: {
           type: 'string',
           format: 'binary',
         },
       },
     },
   })
-  async uploadThumbnail(@UploadedFile() thumbnail: Express.Multer.File) {
-    this.logger.log('🖼️ Upload thumbnail request received');
-
-    try {
-      if (!thumbnail) {
-        throw new BadRequestException('No thumbnail file provided');
-      }
-
-      this.logger.log(`📸 Thumbnail received: ${thumbnail.originalname}, Size: ${thumbnail.size} bytes, Type: ${thumbnail.mimetype}`);
-
-      // Validation du type de fichier
-      if (!thumbnail.mimetype.startsWith('image/')) {
-        throw new BadRequestException('File must be an image');
-      }
-
-      // Validation de la taille
-      const MAX_SIZE = 10 * 1024 * 1024; // 10MB
-      if (thumbnail.size > MAX_SIZE) {
-        throw new BadRequestException('Thumbnail too large. Maximum size is 10MB');
-      }
-
-      // Générer une URL simulée
-      const thumbnailId = uuidv4();
-      const thumbnailUrl = `https://your-storage-bucket.s3.amazonaws.com/thumbnails/${thumbnailId}.jpg`;
-
-      this.logger.log(`✅ Thumbnail uploaded successfully: ${thumbnailId}`);
-
-      return {
-        statusCode: HttpStatus.CREATED,
-        message: 'Thumbnail uploaded successfully',
-        data: {
-          thumbnail_url: thumbnailUrl,
-          file_size: thumbnail.size,
-          mime_type: thumbnail.mimetype,
-          thumbnail_id: thumbnailId,
-          original_name: thumbnail.originalname,
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: diskStorage({
+        destination: './uploads/thumbnails',
+        filename: (req, file, callback) => {
+          const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+          const ext = extname(file.originalname);
+          const filename = `thumb-${uniqueSuffix}${ext}`;
+          callback(null, filename);
         },
-      };
-    } catch (error) {
-      this.logger.error(`Thumbnail upload failed: ${error.message}`);
-      throw error;
+      }),
+      fileFilter: (req, file, callback) => {
+        if (!file.mimetype.startsWith('image/')) {
+          return callback(
+            new BadRequestException('Only image files are allowed'),
+            false,
+          );
+        }
+        callback(null, true);
+      },
+      limits: {
+        fileSize: 5 * 1024 * 1024, // 5MB
+      },
+    }),
+  )
+  async uploadThumbnail(@UploadedFile() file: Express.Multer.File) {
+    if (!file) {
+      throw new BadRequestException('No file uploaded');
     }
+
+    const baseURL = process.env.BASE_URL || 'http://localhost:3000';
+    const thumbnailURL = `${baseURL}/uploads/thumbnails/${file.filename}`;
+
+    this.logger.log(`📸 Thumbnail uploaded: ${thumbnailURL}`);
+
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Thumbnail uploaded successfully',
+      data: {
+        thumbnail_url: thumbnailURL,
+        file_size: file.size,
+        mime_type: file.mimetype,
+      },
+    };
   }
 }

@@ -9,7 +9,13 @@ import {
   Put,
   Patch,
   Delete,
+  Param,
+  Res,
+  NotFoundException,
 } from '@nestjs/common';
+import type { Response } from 'express';
+import { join, isAbsolute } from 'path';
+import * as fs from 'fs';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
@@ -27,6 +33,7 @@ import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { ChangeEmailDto } from './dto/change-email.dto';
 import { DeleteAccountDto } from './dto/delete-account.dto';
+import { SetProfilePictureDto } from './dto/set-profile-picture.dto';
 import { UseGuards } from '@nestjs/common';
 
 
@@ -48,6 +55,42 @@ export class UsersController {
       statusCode: HttpStatus.OK,
       message: 'Profil récupéré avec succès',
       data: profile,
+    };
+  }
+
+  // ✅ 1.b Obtenir le nom d'un utilisateur à partir de son ID
+  @Get(':id/name')
+  @ApiOperation({ summary: 'Récupérer le nom complet et le username via un ID utilisateur' })
+  async getUserNameById(@Param('id') id: string) {
+    const data = await this.usersService.getUserNameById(id);
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Nom utilisateur récupéré avec succès',
+      data,
+    };
+  }
+
+  @Get(':id/reels')
+  @ApiOperation({ summary: 'Lister tous les reels appartenant à un utilisateur' })
+  async getUserReels(@Param('id') id: string) {
+    const data = await this.usersService.getUserReels(id);
+
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Reels récupérés avec succès',
+      data,
+    };
+  }
+
+  @Get(':id/restaurants')
+  @ApiOperation({ summary: 'Lister tous les restaurants appartenant à un utilisateur' })
+  async getUserRestaurants(@Param('id') id: string) {
+    const data = await this.usersService.getUserRestaurants(id);
+
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Restaurants récupérés avec succès',
+      data,
     };
   }
 
@@ -97,6 +140,81 @@ export class UsersController {
       message: 'Profil mis à jour avec succès',
       data: updatedUser,
     };
+  }
+
+  // ✅ 2.b. Changer la photo de profil (URL externe ou image par défaut)
+  @Patch('profile/picture')
+  @ApiOperation({ 
+    summary: 'Changer la photo de profil',
+    description: 'Permet de définir une photo de profil soit via une URL externe, soit en choisissant une image par défaut (p2, p3, p4, p5)'
+  })
+  @ApiResponse({ status: 200, description: 'Photo de profil mise à jour' })
+  @ApiResponse({ status: 400, description: 'Données invalides' })
+  async setProfilePicture(
+    @CurrentUser() user: any,
+    @Body() setPictureDto: SetProfilePictureDto,
+  ) {
+    const updatedUser = await this.usersService.setProfilePicture(
+      user.user_id,
+      setPictureDto,
+    );
+
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Photo de profil mise à jour avec succès',
+      data: updatedUser,
+    };
+  }
+
+  // ✅ 2.c. Récupérer l'image de profil d'un utilisateur
+  @Get(':id/picture')
+  @ApiOperation({ 
+    summary: 'Récupérer l\'image de profil d\'un utilisateur',
+    description: 'Retourne l\'image de profil d\'un utilisateur à partir de son ID. Pour les URLs externes, retourne une redirection.'
+  })
+  @ApiResponse({ status: 200, description: 'Image retournée' })
+  @ApiResponse({ status: 404, description: 'Utilisateur ou image non trouvée' })
+  async getUserProfilePicture(
+    @Param('id') id: string,
+    @Res() res: Response,
+  ) {
+    const pictureInfo = await this.usersService.getUserProfilePicture(id);
+
+    // Si c'est une URL externe, rediriger
+    if (pictureInfo.type === 'external') {
+      return res.redirect(pictureInfo.url);
+    }
+
+    // TypeScript sait maintenant que pictureInfo.type === 'local'
+    // donc pictureInfo.path et pictureInfo.relativePath sont définis
+    const imagePath = pictureInfo.path;
+    const relativePath = pictureInfo.relativePath;
+
+    // Si c'est une image locale, vérifier qu'elle existe et la retourner
+    if (!fs.existsSync(imagePath)) {
+      throw new NotFoundException('Image de profil introuvable');
+    }
+
+    // Déterminer le type MIME basé sur l'extension
+    const ext = imagePath.split('.').pop()?.toLowerCase();
+    const mimeTypes: Record<string, string> = {
+      jpg: 'image/jpeg',
+      jpeg: 'image/jpeg',
+      png: 'image/png',
+      gif: 'image/gif',
+      webp: 'image/webp',
+    };
+    const contentType = mimeTypes[ext || ''] || 'image/jpeg';
+
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Disposition', `inline; filename="${relativePath.split('/').pop() || 'profile.jpg'}"`);
+    
+    // sendFile attend un chemin absolu
+    const absolutePath = isAbsolute(imagePath)
+      ? imagePath
+      : imagePath;
+    
+    return res.sendFile(absolutePath);
   }
 
   // ✅ 3. Changer son mot de passe

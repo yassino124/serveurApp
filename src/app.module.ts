@@ -10,11 +10,17 @@ import { AppService } from './app.service';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { ReelsModule } from './modules/reels/reels.module';
-import { UploadModule } from './upload.module'; // ← Chemin corrigé
-
+import { UploadModule } from './upload.module';
+import { RestaurantsModule } from './modules/restaurants/restaurants.module';
+import { OrdersModule } from './modules/orders/orders.module';
+import { MessagesModule } from './modules/messages/messages.module';
 import { LoggerMiddleware } from './common/middleware/logger.middleware';
 import { HttpErrorFilter } from './common/filters/http-error.filter';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
+import { WalletModule } from './modules/wallet/wallet.module';
+import { StripeModule } from './modules/stripe/stripe.module';
+import { MessagerieModule } from './modules/messagerie/messagerie.module';
+import { AIModule } from './modules/ai/ai.module';
 
 @Module({
   imports: [
@@ -27,12 +33,22 @@ import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
         uri: configService.get<string>('MONGODB_URI') || 'mongodb://localhost:27017/platenet',
+        // Options pour éviter les warnings
+        autoIndex: true,
+        autoCreate: false,
       }),
     }),
     AuthModule,
     UsersModule,
     ReelsModule,
-    UploadModule, // ← Doit pointer vers le bon chemin
+    OrdersModule,
+    MessagesModule,
+    RestaurantsModule,
+    UploadModule,
+    WalletModule,
+    StripeModule,
+    AIModule,
+    MessagerieModule, 
   ],
   controllers: [AppController],
   providers: [
@@ -55,7 +71,14 @@ export class AppModule implements NestModule, OnModuleInit {
     this.logger.log('   ✅ AuthModule');
     this.logger.log('   ✅ UsersModule'); 
     this.logger.log('   ✅ ReelsModule');
-    this.logger.log('   ✅ UploadModule'); // ← Ajouté
+    this.logger.log('   🧾 OrdersModule');
+    this.logger.log('   ✉️ MessagesModule');
+    this.logger.log('   🍽️ RestaurantsModule');
+    this.logger.log('   ✅ UploadModule');
+    this.logger.log('   💰 WalletModule');
+    this.logger.log('   💳 StripeModule');
+    this.logger.log('   💬 MessagerieModule');
+    this.logger.log('   🤖 AiModule');
   }
 
   configure(consumer: MiddlewareConsumer) {

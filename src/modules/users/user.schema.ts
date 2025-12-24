@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document } from 'mongoose';
+import { Document, Types } from 'mongoose';
 import { v4 as uuidv4 } from 'uuid';
 
 export type UserDocument = User & Document;
@@ -16,61 +16,52 @@ export enum AccountStatus {
   ACTIVE = 'active',
   SUSPENDED = 'suspended',
   BANNED = 'banned',
-  PENDING_DELETION ='pending_deletion',
+  PENDING_DELETION = 'pending_deletion',
 }
 
-// ✅ Catégories de cuisine pour PlateNet (Réseau social culinaire)
+// ✅ Catégories de cuisine pour PlateNet
 export enum CuisineCategory {
-  // Cuisines du monde
-  TUNISIAN = 'tunisian',              // Cuisine tunisienne
-  MEDITERRANEAN = 'mediterranean',    // Méditerranéenne
-  ITALIAN = 'italian',                // Italienne
-  FRENCH = 'french',                  // Française
-  ASIAN = 'asian',                    // Asiatique
-  MEXICAN = 'mexican',                // Mexicaine
-  MIDDLE_EASTERN = 'middle_eastern',  // Moyen-Orient
-  AMERICAN = 'american',              // Américaine
-  INDIAN = 'indian',                  // Indienne
-  JAPANESE = 'japanese',              // Japonaise
-  
-  // Types de plats
-  SEAFOOD = 'seafood',                // Fruits de mer
-  MEAT = 'meat',                      // Viandes
-  VEGETARIAN = 'vegetarian',          // Végétarien
-  VEGAN = 'vegan',                    // Vegan
-  PASTA = 'pasta',                    // Pâtes
-  PIZZA = 'pizza',                    // Pizza
-  BURGERS = 'burgers',                // Burgers
-  SALADS = 'salads',                  // Salades
-  SOUPS = 'soups',                    // Soupes
-  GRILLED = 'grilled',                // Grillades
-  
-  // Catégories spéciales
-  DESSERTS = 'desserts',              // Desserts
-  PASTRIES = 'pastries',              // Pâtisserie
-  BAKERY = 'bakery',                  // Boulangerie
-  STREET_FOOD = 'street_food',        // Street food
-  FAST_FOOD = 'fast_food',            // Fast food
-  FINE_DINING = 'fine_dining',        // Gastronomie
-  HOME_COOKING = 'home_cooking',      // Cuisine maison
-  FUSION = 'fusion',                  // Fusion
-  
-  // Régimes et tendances
-  HEALTHY = 'healthy',                // Healthy
-  ORGANIC = 'organic',                // Bio
-  GLUTEN_FREE = 'gluten_free',        // Sans gluten
-  KETO = 'keto',                      // Keto
-  LOW_CARB = 'low_carb',              // Low carb
-  
-  // Occasions
-  BREAKFAST = 'breakfast',            // Petit-déjeuner
-  BRUNCH = 'brunch',                  // Brunch
-  LUNCH = 'lunch',                    // Déjeuner
-  DINNER = 'dinner',                  // Dîner
-  SNACKS = 'snacks',                  // Snacks
-  DRINKS = 'drinks',                  // Boissons
-  COCKTAILS = 'cocktails',            // Cocktails
-  COFFEE = 'coffee',                  // Café
+  TUNISIAN = 'tunisian',
+  MEDITERRANEAN = 'mediterranean',
+  ITALIAN = 'italian',
+  FRENCH = 'french',
+  ASIAN = 'asian',
+  MEXICAN = 'mexican',
+  MIDDLE_EASTERN = 'middle_eastern',
+  AMERICAN = 'american',
+  INDIAN = 'indian',
+  JAPANESE = 'japanese',
+  SEAFOOD = 'seafood',
+  MEAT = 'meat',
+  VEGETARIAN = 'vegetarian',
+  VEGAN = 'vegan',
+  PASTA = 'pasta',
+  PIZZA = 'pizza',
+  BURGERS = 'burgers',
+  SALADS = 'salads',
+  SOUPS = 'soups',
+  GRILLED = 'grilled',
+  DESSERTS = 'desserts',
+  PASTRIES = 'pastries',
+  BAKERY = 'bakery',
+  STREET_FOOD = 'street_food',
+  FAST_FOOD = 'fast_food',
+  FINE_DINING = 'fine_dining',
+  HOME_COOKING = 'home_cooking',
+  FUSION = 'fusion',
+  HEALTHY = 'healthy',
+  ORGANIC = 'organic',
+  GLUTEN_FREE = 'gluten_free',
+  KETO = 'keto',
+  LOW_CARB = 'low_carb',
+  BREAKFAST = 'breakfast',
+  BRUNCH = 'brunch',
+  LUNCH = 'lunch',
+  DINNER = 'dinner',
+  SNACKS = 'snacks',
+  DRINKS = 'drinks',
+  COCKTAILS = 'cocktails',
+  COFFEE = 'coffee',
 }
 
 @Schema({ timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } })
@@ -102,14 +93,13 @@ export class User {
   @Prop({ type: String, enum: AccountStatus, default: AccountStatus.PENDING })
   account_status: AccountStatus;
 
-  // ✅ NOUVEAU : Catégories de cuisine préférées
+  // ✅ Catégories de cuisine préférées
   @Prop({ 
     type: [String], 
-    enum: CuisineCategory,
+    enum: Object.values(CuisineCategory),
     default: [] 
   })
   preferred_categories: CuisineCategory[];
-
 
   @Prop({ type: Object, default: {} })
   preferences?: Record<string, any>;
@@ -125,8 +115,24 @@ export class User {
 
   @Prop({ default: 0 })
   likes_received: number;
+  @Prop({ default: 0 })
+  total_likes_given: number;
 
-  // ✅ NOUVEAU : Date de désactivation (pour traçabilité)
+  @Prop({ default: 0 })
+  total_likes_received: number;
+
+  @Prop({ default: 0 })
+  total_comments_given: number;
+
+  @Prop({ default: 0 })
+  total_comments_received: number;
+
+  @Prop({ default: 0 })
+  total_shares_given: number;
+
+  @Prop({ default: 0 })
+  total_shares_received: number;
+  // ✅ Date de désactivation (pour traçabilité)
   @Prop()
   suspended_at?: Date;
 
@@ -137,9 +143,7 @@ export class User {
   @Prop()
   scheduled_deletion_date?: Date;
 
-  created_at: Date;
-  updated_at: Date;
-    @Prop({ 
+  @Prop({ 
     type: String, 
     enum: ['local', 'google', 'apple'], 
     default: 'local' 
@@ -155,11 +159,39 @@ export class User {
   @Prop({ type: Object })
   social_data?: Record<string, any>;
 
+  // ✅ Système de balance/wallet
+  @Prop({ default: 0, min: 0 })
+  balance: number;
+
+  @Prop({ type: String, unique: true, sparse: true })
+  stripe_customer_id?: string;
+
+  @Prop({ type: String, unique: true, sparse: true })
+  stripe_account_id?: string; // Pour les chefs/restaurants qui reçoivent des paiements
+
+  @Prop({ type: Object, default: {} })
+  payment_methods?: Record<string, any>;
+
+  @Prop({ default: 'TND' })
+  currency: string;
+
+  // ✅ CORRECTION : Utiliser Types.ObjectId au lieu de MongooseSchema.Types.ObjectId
+  @Prop([{ 
+    type: Types.ObjectId, 
+    ref: 'Transaction' 
+  }])
+  transactions?: Types.ObjectId[];
+
+  created_at: Date;
+  updated_at: Date;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);
 
+// Index pour optimiser les requêtes
 UserSchema.index({ email: 1 });
 UserSchema.index({ username: 1 });
 UserSchema.index({ user_id: 1 });
 UserSchema.index({ account_status: 1 });
+UserSchema.index({ stripe_customer_id: 1 });
+UserSchema.index({ stripe_account_id: 1 });
