@@ -4,55 +4,41 @@ services:
     env: node
     region: frankfurt
     plan: free
+
     buildCommand: |
-      export NODE_OPTIONS="--max-old-space-size=512"
-      npm ci --only=production --no-audit --prefer-offline
+      export NODE_OPTIONS="--max-old-space-size=1024"
+      npm install
       npm run build
+      npm prune --production
+
     startCommand: npm run start:render
     healthCheckPath: /api
     autoDeploy: true
+
     disk:
       name: uploads
       mountPath: /opt/render/uploads
       sizeGB: 1
+
     envVars:
       - key: NODE_ENV
         value: production
+
       - key: NODE_OPTIONS
         value: --max-old-space-size=256
+
       - key: UPLOAD_PATH
         value: /opt/render/uploads
+
       - key: MONGODB_URI
         sync: false
       - key: JWT_SECRET
         sync: false
       - key: GEMINI_API_KEY
         sync: false
-      - key: PEXELS_API_KEY
-        sync: false
       - key: STRIPE_SECRET_KEY
-        sync: false
-      - key: STRIPE_PUBLISHABLE_KEY
-        sync: false
-      - key: STRIPE_WEBHOOK_SECRET
         sync: false
       - key: GOOGLE_CLIENT_ID
         sync: false
       - key: GOOGLE_CLIENT_SECRET
         sync: false
-      - key: GOOGLE_CALLBACK_URL
-        sync: false
-      - key: FRONTEND_URL
-        sync: false
-      - key: BACKEND_URL
-        sync: false
-      - key: CORS_ORIGIN
-        sync: false
-      - key: STRIPE_API_VERSION
-        value: 2025-11-17.clover
-      - key: STRIPE_CURRENCY
-        value: usd
-      - key: PLATFORM_COMMISSION_PERCENTAGE
-        value: "5"
-      - key: STRIPE_CONNECT_ENABLED
-        value: "true"

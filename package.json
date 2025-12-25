@@ -8,7 +8,7 @@
   "scripts": {
     "clean": "rm -rf dist .nest node_modules/.cache",
     "prebuild": "npm run clean",
-    "build": "NODE_OPTIONS=--max-old-space-size=512 nest build --webpack=false",
+    "build": "nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
     "start:dev": "nest start --watch",
