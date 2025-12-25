@@ -10,7 +10,7 @@ import { AppService } from './app.service';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { ReelsModule } from './modules/reels/reels.module';
-import { UploadModule } from './upload.module';
+import { UploadModule } from './modules/upload/upload.module'; // ✅ CORRIGÉ: Chemin correct
 import { RestaurantsModule } from './modules/restaurants/restaurants.module';
 import { OrdersModule } from './modules/orders/orders.module';
 import { MessagesModule } from './modules/messages/messages.module';
