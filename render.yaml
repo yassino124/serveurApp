@@ -4,7 +4,7 @@ services:
     env: node
     region: frankfurt
     plan: free
-    buildCommand: npm install && npm run build
+    buildCommand: NODE_OPTIONS=--max-old-space-size=256 npm install && NODE_OPTIONS=--max-old-space-size=256 npm run build
     startCommand: npm run start:prod
     healthCheckPath: /health
     envVars:
@@ -13,7 +13,7 @@ services:
       - key: UPLOAD_PATH
         value: /tmp/uploads
       - key: NODE_OPTIONS
-        value: --max-old-space-size=384
+        value: --max-old-space-size=256  # Baddel 384 → 256
       - key: MONGODB_URI
         sync: false
       - key: JWT_SECRET
