@@ -13,7 +13,7 @@ services:
       - key: UPLOAD_PATH
         value: /tmp/uploads
       - key: NODE_OPTIONS
-        value: --max-old-space-size=450
+        value: --max-old-space-size=384
       - key: MONGODB_URI
         sync: false
       - key: JWT_SECRET
