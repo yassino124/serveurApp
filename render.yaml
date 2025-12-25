@@ -6,12 +6,14 @@ services:
     plan: free
     buildCommand: npm install && npm run build
     startCommand: npm run start:prod
-    healthCheckPath: /
+    healthCheckPath: /health
     envVars:
       - key: NODE_ENV
         value: production
-      - key: PORT
-        value: 10000
+      - key: UPLOAD_PATH
+        value: /tmp/uploads
+      - key: NODE_OPTIONS
+        value: --max-old-space-size=450
       - key: MONGODB_URI
         sync: false
       - key: JWT_SECRET
@@ -36,9 +38,13 @@ services:
         sync: false
       - key: BACKEND_URL
         sync: false
-      - key: HUGGING_FACE_API_KEY
+      - key: CORS_ORIGIN
         sync: false
-      - key: MINIMAX_API_KEY
-        sync: false
-      - key: MINIMAX_GROUP_ID
-        sync: false
+      - key: STRIPE_API_VERSION
+        value: 2025-11-17.clover
+      - key: STRIPE_CURRENCY
+        value: usd
+      - key: PLATFORM_COMMISSION_PERCENTAGE
+        value: 5
+      - key: STRIPE_CONNECT_ENABLED
+        value: true
