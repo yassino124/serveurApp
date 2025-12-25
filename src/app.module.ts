@@ -20,7 +20,6 @@ import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { WalletModule } from './modules/wallet/wallet.module';
 import { StripeModule } from './modules/stripe/stripe.module';
 import { MessagerieModule } from './modules/messagerie/messagerie.module';
-import { AIModule } from './modules/ai/ai.module';
 
 @Module({
   imports: [
@@ -47,7 +46,6 @@ import { AIModule } from './modules/ai/ai.module';
     UploadModule,
     WalletModule,
     StripeModule,
-    AIModule,
     MessagerieModule, 
   ],
   controllers: [AppController],
