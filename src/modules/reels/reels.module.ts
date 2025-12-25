@@ -6,7 +6,6 @@ import { ReelsController } from './reels.controller';
 import { Reel, ReelSchema } from './reel.schema';
 import { User, UserSchema } from '../users/user.schema';
 import { Restaurant, RestaurantSchema } from '../restaurants/restaurant.schema';
-import { AIModule } from '../ai/ai.module';
 import { ContentModerationService } from './content-moderation.service'; 
 import { StripeModule } from '../stripe/stripe.module';
 
@@ -18,7 +17,6 @@ import { StripeModule } from '../stripe/stripe.module';
       { name: Restaurant.name, schema: RestaurantSchema }, // ← Add Restaurant model here
 
     ]),
-    AIModule,
     forwardRef(() => StripeModule),
   ],
   controllers: [ReelsController],

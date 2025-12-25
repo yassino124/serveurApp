@@ -29,7 +29,6 @@ import { CreateReelDto } from './dto/create-reel.dto';
 import { UpdateReelDto } from './dto/update-reel.dto';
 import { DeleteReelDto } from './dto/delete-reel.dto';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import { ReelsAIService } from '../ai/reels-ai.service';
 import { ContentModerationService } from '../reels/content-moderation.service';
 import { CreateReelAIDto } from './dto/create-reel-ai.dto';
 import { ValidationPipe, UsePipes } from '@nestjs/common';
@@ -61,7 +60,6 @@ export class ReelsController {
 
   constructor(
     private readonly reelsService: ReelsService,
-    private readonly reelsAIService: ReelsAIService,
     private readonly contentModerationService: ContentModerationService,
   ) {}
 
@@ -1001,117 +999,6 @@ async getReelLikes(
       },
     };
   }
-    // Nouvelle méthode pour créer un reel avec IA
-@Post('create-with-ai')
-@ApiOperation({ summary: 'Créer un reel avec génération IA' })
-async createReelWithAIs(
-  @CurrentUser() user: any,
-  @Body() body: { 
-    dishName: string;
-    cuisine?: string;
-    style?: string;
-    visibility?: string;
-    location?: string;
-  }
-): Promise<ApiResponse<any>> {
-  try {
-    // 1. Générer le contenu avec IA
-    const aiContent = await this.reelsAIService.generateAIReel(
-      body.dishName,
-      body.cuisine,
-      body.style
-    );
-
-    // 2. Créer le DTO pour le reel
-    const createReelDto: CreateReelDto = {
-      video_url: aiContent.video_url,
-      thumbnail_url: aiContent.thumbnail_url,
-      caption: aiContent.ai_caption,
-      hashtags: aiContent.ai_hashtags,
-      categories: aiContent.categories,
-      location: body.location,
-      visibility: body.visibility || 'public',
-      ai_enhanced: true,
-      ai_caption: aiContent.ai_caption,
-      ai_hashtags: aiContent.ai_hashtags,
-    };
-
-    // 3. Créer le reel dans la base de données
-    const reel = await this.reelsService.createReel(user.user_id, createReelDto);
-    
-    return {
-      statusCode: HttpStatus.CREATED,
-      message: 'Reel IA créé avec succès',
-      data: reel,
-    };
-    
-  } catch (error) {
-    this.logger.error(`Erreur création reel IA: ${error.message}`);
-    return {
-      statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
-      message: 'Erreur lors de la création du reel IA',
-      data: null,
-    };
-  }
-}
-  // Nouvelle méthode pour créer un reel avec IA
-// 🆕 ROUTE: Tester la connexion Minimax
-@Get('debug/test-minimax')
-@ApiOperation({ summary: 'Tester la connexion à l\'API Minimax' })
-async testMinimaxConnection(): Promise<ApiResponse<any>> {
-  try {
-    const result = await this.reelsAIService.testMinimaxConnection();
-    
-    return {
-      statusCode: HttpStatus.OK,
-      message: result.success ? 'Connexion réussie' : 'Connexion échouée',
-      data: result,
-    };
-  } catch (error) {
-    this.logger.error(`❌ Erreur test Minimax: ${error.message}`);
-    throw new BadRequestException('Erreur lors du test de connexion Minimax');
-  }
-}
-
-// 🆕 ROUTE: Générer seulement la vidéo (sans créer de reel)
-@Post('generate-ai-video')
-@ApiOperation({ summary: 'Générer une vidéo AI avec Minimax (sans créer de reel)' })
-@ApiResponse({
-  status: HttpStatus.OK,
-  description: 'Vidéo générée avec succès',
-})
-async generateAIVideo(
-  @Body() body: {
-    dishName: string;
-    cuisine?: string;
-    style?: string;
-    description?: string;
-    duration?: number;
-  }
-): Promise<ApiResponse<any>> {
-  try {
-    this.logger.log(`🎥 Génération vidéo AI pour: ${body.dishName}`);
-
-    const aiContent = await this.reelsAIService.generateAIReel(
-      body.dishName,
-      body.cuisine,
-      body.style,
-      body.description
-    );
-
-    return {
-      statusCode: HttpStatus.OK,
-      message: 'Vidéo AI générée avec succès',
-      data: aiContent,
-    };
-
-  } catch (error) {
-    this.logger.error(`❌ Erreur génération vidéo AI: ${error.message}`);
-    throw new BadRequestException(
-      `Impossible de générer la vidéo: ${error.message}`
-    );
-  }
-}
 
 @Post('create-with-ai')
 @ApiOperation({ summary: 'Créer un reel avec génération vidéo Minimax AI' })
@@ -1128,149 +1015,6 @@ async generateAIVideo(
   whitelist: true,
   forbidNonWhitelisted: true 
 }))
-async createReelWithAI(
-  @CurrentUser() user: any,
-  @Body() createReelAIDto: CreateReelAIDto,
-): Promise<ApiResponse<any>> {
-  try {
-    // 🔍 LOG de débogage
-    this.logger.log(`🎬 === DÉBUT création reel AI ===`);
-    this.logger.log(`👤 User: ${user?.user_id || 'non trouvé'}`);
-    this.logger.log(`📦 Données reçues: ${JSON.stringify(createReelAIDto)}`);
-    
-    // ✅ Vérification supplémentaire (sécurité)
-    if (!createReelAIDto?.dishName || createReelAIDto.dishName.trim().length < 2) {
-      throw new BadRequestException({
-        message: 'Le nom du plat (dishName) est requis et doit contenir au moins 2 caractères',
-        received: createReelAIDto?.dishName || 'non défini',
-      });
-    }
-
-    const dishName = createReelAIDto.dishName.trim();
-    const cuisine = createReelAIDto.cuisine || 'non spécifiée';
-    
-    this.logger.log(`📝 Plat: "${dishName}", Cuisine: ${cuisine}`);
-    this.logger.log(`🎨 Style: ${createReelAIDto.style || 'cinematic'}`);
-    this.logger.log(`📍 Localisation: ${createReelAIDto.location || 'non spécifiée'}`);
-
-    // 1. Générer le contenu avec Minimax AI
-    this.logger.log(`🤖 Début génération du contenu AI...`);
-    
-    const aiContent = await this.reelsAIService.generateAIReel(
-      dishName,
-      createReelAIDto.cuisine,
-      createReelAIDto.style || 'cinematic',
-      createReelAIDto.description
-    );
-
-    this.logger.log(`✅ Contenu AI généré avec succès:`);
-    this.logger.log(`   📹 Video URL: ${aiContent.video_url}`);
-    this.logger.log(`   🖼️  Thumbnail: ${aiContent.thumbnail_url}`);
-    this.logger.log(`   📝 Caption: ${aiContent.ai_caption.substring(0, 50)}...`);
-    this.logger.log(`   🏷️  Hashtags: ${aiContent.ai_hashtags.length}`);
-    this.logger.log(`   📂 Catégories: ${aiContent.categories.join(', ')}`);
-
-    // 2. Créer le DTO pour le reel
-    const createReelDto: CreateReelDto = {
-      video_url: aiContent.video_url,
-      thumbnail_url: aiContent.thumbnail_url,
-      caption: aiContent.ai_caption,
-      hashtags: aiContent.ai_hashtags,
-      categories: aiContent.categories,
-      location: createReelAIDto.location,
-      visibility: createReelAIDto.visibility || 'public',
-      video_duration: aiContent.video_metadata.duration,
-      ai_enhanced: true,
-      ai_caption: aiContent.ai_caption,
-      ai_hashtags: aiContent.ai_hashtags,
-    };
-
-    // 3. Modération du contenu généré (sécurité)
-    this.logger.log(`🔍 Modération du contenu généré...`);
-    
-    const moderationResult = await this.contentModerationService.moderateTextContent(
-      aiContent.ai_caption,
-      aiContent.ai_hashtags,
-      aiContent.categories
-    );
-
-    if (!moderationResult.isApproved && moderationResult.confidence < 50) {
-      this.logger.warn(`⚠️ Contenu AI modéré: ${moderationResult.reason}`);
-      
-      // Améliorer automatiquement le contenu si besoin
-      const improvedCaption = await this.contentModerationService.generateFoodCaption(
-        aiContent.ai_caption,
-        dishName,
-        aiContent.categories
-      );
-      
-      createReelDto.caption = improvedCaption;
-      createReelDto.ai_caption = improvedCaption;
-      this.logger.log(`✨ Caption améliorée: ${improvedCaption.substring(0, 50)}...`);
-    }
-
-    // 4. Créer le reel dans la base de données
-    this.logger.log(`💾 Création du reel en base de données...`);
-    
-    const reel = await this.reelsService.createReel(user.user_id, createReelDto);
-    
-    if (!reel) {
-      throw new Error('Échec de la création du reel: le service a retourné null');
-    }
-
-    this.logger.log(`✅ Reel créé avec succès: ${reel._id || reel.reel_id}`);
-    this.logger.log(`🎬 === FIN création reel AI ===`);
-
-    return {
-      statusCode: HttpStatus.CREATED,
-      message: 'Reel IA créé avec succès',
-      data: {
-        ...reel.toObject(),
-        ai_generation: {
-          dish_name: dishName,
-          cuisine: createReelAIDto.cuisine,
-          style: createReelAIDto.style,
-          description: createReelAIDto.description,
-          duration: createReelAIDto.duration || 6,
-          video_metadata: aiContent.video_metadata,
-          generated_at: new Date().toISOString(),
-        },
-        moderation: {
-          approved: moderationResult.isApproved,
-          confidence: moderationResult.confidence,
-          reason: moderationResult.reason,
-        },
-      },
-    };
-    
-  } catch (error) {
-    this.logger.error(`💥 ERREUR création reel AI: ${error.message}`);
-    this.logger.error(`Stack: ${error.stack}`);
-    
-    // Gestion spécifique des erreurs
-    if (error instanceof BadRequestException) {
-      throw error;
-    }
-    
-    if (error.message.includes('API credentials not configured')) {
-      throw new BadRequestException(
-        'Service AI non configuré. Vérifiez les clés API Minimax.'
-      );
-    }
-    
-    if (error.message.includes('timeout') || error.message.includes('Timeout')) {
-      throw new BadRequestException(
-        'Le service AI prend trop de temps. Réessayez plus tard.'
-      );
-    }
-    
-    throw new BadRequestException({
-      message: 'Erreur lors de la création du reel AI',
-      error: error.message,
-      details: 'Vérifiez les données envoyées et réessayez.',
-    });
-  }
-}
 
 // 🆕 ROUTE: Prévisualiser avant génération
 @Post('preview-ai-generation')
@@ -1349,26 +1093,6 @@ async previewAIGeneration(
     };
   }
 // Dans reels.controller.ts
-@Get('debug/minimax-status')
-@ApiOperation({ summary: 'Vérifier le statut de l\'API Minimax' })
-async checkMinimaxStatus(): Promise<ApiResponse<any>> {
-  try {
-    const result = await this.reelsAIService.testMinimaxConnection();
-    
-    return {
-      statusCode: result.success ? HttpStatus.OK : HttpStatus.SERVICE_UNAVAILABLE,
-      message: result.message,
-      data: result.details || {},
-    };
-  } catch (error) {
-    this.logger.error(`❌ Erreur vérification status: ${error.message}`);
-    return {
-      statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
-      message: 'Erreur lors de la vérification',
-      data: { error: error.message },
-    };
-  }
-}
 
 @Get('debug/env-config')
 @ApiOperation({ summary: 'Vérifier la configuration environnement' })
