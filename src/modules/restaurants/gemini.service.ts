@@ -11,7 +11,7 @@ export class GeminiService {
   private apiKey: string;
 
   constructor() {
-    this.apiKey = process.env.GEMINI_API_KEY || '';
+    this.apiKey = process.env.GEMINI_API_KEY1 || '';
     this.genAI = new GoogleGenerativeAI(this.apiKey);
   }
 

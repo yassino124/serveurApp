@@ -673,7 +673,169 @@ Réponds avec UNE liste simple, un hashtag par ligne, sans numéros ni tirets:`;
       return ['food', 'cuisine', 'delicious', 'foodporn'];
     }
   }
+// ✅ Ajouter cette méthode dans content-moderation.service.ts
 
+/**
+ * 🆕 Analyser une vidéo directement depuis son URL Cloudinary
+ * Télécharge en mémoire (Buffer) sans créer de fichier temporaire
+ */
+async analyzeVideoContentFromURL(
+  videoUrl: string,
+  mimeType: string = 'video/mp4'
+): Promise<ContentModerationResult> {
+  try {
+    this.logger.log(`🎥 Analyse vidéo depuis URL: ${videoUrl}`);
+    
+    // ⬇️ ÉTAPE 1: Télécharger la vidéo EN MÉMOIRE (pas sur disque)
+    this.logger.log(`⬇️ Téléchargement de la vidéo en mémoire...`);
+    const response = await axios.get(videoUrl, {
+      responseType: 'arraybuffer', // Important: recevoir en buffer
+      timeout: 60000, // 60 secondes
+      maxContentLength: 100 * 1024 * 1024, // 100MB max
+    });
+    
+    const videoBuffer = Buffer.from(response.data);
+    const videoSizeMB = (videoBuffer.length / 1024 / 1024).toFixed(2);
+    this.logger.log(`✅ Vidéo téléchargée: ${videoSizeMB} MB`);
+    
+    // 🔄 ÉTAPE 2: Convertir en base64
+    const base64Data = videoBuffer.toString('base64');
+    this.logger.log(`🔄 Conversion en base64 terminée`);
+
+    // 🤖 ÉTAPE 3: Préparer le prompt pour Gemini
+    const prompt = `Tu es un expert en analyse de contenu culinaire pour les réseaux sociaux.
+
+Analyse cette vidéo et détermine:
+1. Si c'est lié à la nourriture/cuisine (is_food_related: true/false)
+2. Le niveau de confiance (confidence: 0-100)
+3. Les catégories culinaires détectées (detected_categories: tableau)
+4. Les plats/ingrédients identifiés (detected_dishes: tableau)
+5. Une description du contenu (detected_content: string)
+
+CATÉGORIES POSSIBLES:
+- "Recettes" : préparation d'un plat
+- "Restaurant" : plat servi dans un restaurant
+- "Street Food" : nourriture de rue
+- "Desserts" : pâtisseries, gâteaux, sucreries
+- "Boissons" : jus, smoothies, cocktails, café
+- "Végétarien" : plats sans viande
+- "Viandes" : plats à base de viande
+- "Poissons & Fruits de mer" : plats de la mer
+- "Fast Food" : burgers, pizzas, etc.
+- "Cuisine Traditionnelle" : plats traditionnels
+- "Pâtisserie" : création de pâtisserie
+- "Autre" : autre contenu culinaire
+
+Réponds UNIQUEMENT avec un JSON valide (sans markdown, sans texte avant/après):
+{
+  "is_food_related": true,
+  "confidence": 95,
+  "detected_categories": ["Recettes", "Desserts"],
+  "detected_dishes": ["Gâteau au chocolat", "Ganache"],
+  "detected_content": "Préparation d'un gâteau au chocolat avec glaçage",
+  "is_appropriate": true,
+  "reason": null
+}
+
+Si ce n'est PAS de la nourriture:
+{
+  "is_food_related": false,
+  "confidence": 90,
+  "detected_categories": [],
+  "detected_dishes": [],
+  "detected_content": "Contenu non culinaire détecté",
+  "is_appropriate": false,
+  "reason": "Ce contenu n'est pas lié à la nourriture"
+}`;
+
+    // 🔍 ÉTAPE 4: Lister les modèles disponibles avec support vision
+    this.logger.log(`🔍 Récupération des modèles vision...`);
+    const availableModels = await this.listAvailableModels();
+    
+    // Filtrer les modèles avec vision
+    let visionModels = availableModels.filter(model => 
+      model.includes('gemini') && 
+      (model.includes('1.5') || model.includes('2.0') || model.includes('pro') || model.includes('flash'))
+    );
+
+    // Fallback si aucun modèle trouvé
+    if (visionModels.length === 0) {
+      visionModels = [
+        'gemini-1.5-flash-latest',
+        'gemini-1.5-pro-latest',
+        'gemini-2.0-flash-exp',
+        'gemini-exp-1206'
+      ];
+    }
+
+    this.logger.log(`📋 Modèles vision à tester: ${visionModels.join(', ')}`);
+    
+    // 🎯 ÉTAPE 5: Essayer chaque modèle jusqu'à ce qu'un fonctionne
+    let result: string | null = null;
+    const errors: string[] = [];
+    
+    for (const model of visionModels) {
+      try {
+        this.logger.log(`🎯 Tentative avec: ${model}`);
+        result = await this.generateWithVision(model, prompt, base64Data, mimeType);
+        this.logger.log(`✅ Succès avec le modèle: ${model}`);
+        break; // Sortir dès qu'un modèle fonctionne
+      } catch (error: any) {
+        const errorMsg = error.message || 'Erreur inconnue';
+        errors.push(`${model}: ${errorMsg}`);
+        this.logger.warn(`⚠️ Échec avec ${model}: ${errorMsg}`);
+        continue;
+      }
+    }
+
+    if (!result) {
+      this.logger.error('❌ Tous les modèles vision ont échoué:');
+      errors.forEach(err => this.logger.error(`  - ${err}`));
+      throw new Error(`Échec de tous les modèles vision. Essayé: ${visionModels.join(', ')}`);
+    }
+
+    // 📊 ÉTAPE 6: Parser le JSON de réponse
+    let jsonString = result.trim();
+    jsonString = jsonString.replace(/```json\n?/g, '').replace(/```\n?/g, '');
+    
+    const jsonMatch = jsonString.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      jsonString = jsonMatch[0];
+    }
+
+    const analysis = JSON.parse(jsonString);
+
+    // ✅ ÉTAPE 7: Construire le résultat final
+    const moderationResult: ContentModerationResult = {
+      isApproved: analysis.is_food_related && analysis.is_appropriate,
+      isFoodRelated: analysis.is_food_related,
+      confidence: analysis.confidence,
+      reason: analysis.reason || undefined,
+      detectedContent: analysis.detected_content,
+      detectedCategories: analysis.detected_categories || [],
+      detectedDishes: analysis.detected_dishes || [],
+    };
+
+    this.logger.log(`📊 Analyse URL: ${moderationResult.isApproved ? '✅' : '❌'} (confiance: ${moderationResult.confidence}%)`);
+    this.logger.log(`📂 Catégories: ${moderationResult.detectedCategories?.join(', ')}`);
+    this.logger.log(`🍽️ Plats: ${moderationResult.detectedDishes?.join(', ')}`);
+    
+    return moderationResult;
+
+  } catch (error: any) {
+    this.logger.error(`❌ Erreur analyse depuis URL: ${error.message}`);
+    
+    // Retour en cas d'erreur
+    return {
+      isApproved: false,
+      isFoodRelated: false,
+      confidence: 0,
+      reason: `Erreur d'analyse: ${error.message}`,
+      detectedCategories: [],
+      detectedDishes: [],
+    };
+  }
+}
   /**
    * Tester la connexion à l'API Gemini
    */
@@ -698,4 +860,5 @@ Réponds avec UNE liste simple, un hashtag par ligne, sans numéros ni tirets:`;
   async getAvailableModels(): Promise<string[]> {
     return await this.listAvailableModels();
   }
+  
 }

@@ -74,176 +74,168 @@ export class ReelsController {
     description: 'Contenu refusé - non lié à la nourriture',
   })
   @ApiBody({ type: CreateReelDto })
-  async createReel(
-    @CurrentUser() user: any,
-    @Body() createReelDto: CreateReelDto,
-  ): Promise<ApiResponse<any>> {
-    this.logger.log(`🎬 Tentative de création de reel par user: ${user.user_id}`);
+async createReel(
+  @CurrentUser() user: any,
+  @Body() createReelDto: CreateReelDto,
+): Promise<ApiResponse<any>> {
+  this.logger.log(`🎬 Tentative de création de reel par user: ${user.user_id}`);
+  
+  const userId = user.user_id;
+  
+  if (!userId) {
+    throw new Error('User ID not found in authentication token');
+  }
+
+  try {
+    // ✅ ÉTAPE 1: Analyse du contenu vidéo DEPUIS URL CLOUDINARY
+    let videoAnalysis: any = null;
     
-    const userId = user.user_id;
-    
-    if (!userId) {
-      throw new Error('User ID not found in authentication token');
-    }
-
-    try {
-      // ✅ ÉTAPE 1: Analyse du contenu vidéo
-      let videoAnalysis: any = null;
+    if (createReelDto.video_url) {
+      this.logger.log(`🎥 Analyse du contenu vidéo depuis URL Cloudinary...`);
       
-      if (createReelDto.video_url) {
-        this.logger.log(`🎥 Analyse du contenu vidéo...`);
-        
-        const videoPath = await this.downloadVideoForAnalysis(createReelDto.video_url);
-        
-        try {
-          videoAnalysis = await this.contentModerationService.analyzeVideoContent(
-            videoPath,
-            'video/mp4'
-          );
-          
-          this.logger.log(`📊 Analyse vidéo: ${JSON.stringify(videoAnalysis)}`);
-          
-          // Si la vidéo n'est pas liée à la nourriture, rejeter immédiatement
-          if (!videoAnalysis.isApproved) {
-            this.logger.warn(`❌ Vidéo refusée: ${videoAnalysis.reason}`);
-            
-            throw new BadRequestException({
-              message: 'Contenu vidéo refusé - Cette vidéo ne semble pas être liée à la nourriture',
-              reason: videoAnalysis.reason,
-              isFoodRelated: videoAnalysis.isFoodRelated,
-              confidence: videoAnalysis.confidence,
-              detectedContent: videoAnalysis.detectedContent,
-            });
-          }
-
-          // ✅ Enrichir automatiquement les catégories détectées
-          if (videoAnalysis.detectedCategories && videoAnalysis.detectedCategories.length > 0) {
-            // Mapper les catégories françaises vers les enum values MongoDB
-            const mappedCategories = this.mapCategoriesToEnum(videoAnalysis.detectedCategories);
-
-            const allCategories = [
-              ...(createReelDto.categories || []),
-              ...mappedCategories
-            ];
-            createReelDto.categories = [...new Set(allCategories)];
-            
-            this.logger.log(`📂 Catégories mappées: ${videoAnalysis.detectedCategories.join(', ')} → ${mappedCategories.join(', ')}`);
-            this.logger.log(`📂 Catégories finales: ${createReelDto.categories.join(', ')}`);
-          }
-
-          // 🆕 GÉNÉRATION AUTOMATIQUE: Caption + Hashtags depuis la vidéo
-          this.logger.log(`🤖 Génération automatique du contenu depuis la vidéo...`);
-          
-          // Générer caption basée sur l'analyse vidéo
-          const aiCaption = await this.contentModerationService.generateCaptionFromVideo(
-            videoAnalysis.detectedContent || 'Contenu culinaire détecté',
-            videoAnalysis.detectedDishes,
-            videoAnalysis.detectedCategories
-          );
-          
-          // Générer hashtags optimisés basés sur l'analyse vidéo
-          const aiHashtags = await this.contentModerationService.generateHashtagsFromVideo(
-            videoAnalysis.detectedContent || 'Contenu culinaire',
-            videoAnalysis.detectedCategories,
-            videoAnalysis.detectedDishes
-          );
-
-          // Remplacer ou garder l'original selon si l'utilisateur a fourni du contenu
-          const hasUserCaption = createReelDto.caption && createReelDto.caption.trim().length > 5;
-          const hasUserHashtags = createReelDto.hashtags && createReelDto.hashtags.length > 0;
-
-          if (!hasUserCaption || videoAnalysis.confidence > 85) {
-            // Si pas de caption utilisateur OU vidéo très claire → utiliser AI
-            createReelDto.caption = aiCaption;
-            createReelDto.ai_enhanced = true;
-            createReelDto.ai_caption = aiCaption;
-            this.logger.log(`✨ Caption générée par AI: "${aiCaption}"`);
-          }
-
-          if (!hasUserHashtags || videoAnalysis.confidence > 85) {
-            // Si pas de hashtags utilisateur OU vidéo très claire → utiliser AI
-            createReelDto.hashtags = aiHashtags;
-            createReelDto.ai_hashtags = aiHashtags;
-            this.logger.log(`🏷️ Hashtags générés par AI: ${aiHashtags.join(', ')}`);
-          }
-
-        } finally {
-          await this.cleanupTempFile(videoPath);
-        }
-      }
-
-      // ✅ ÉTAPE 2: Modération du contenu textuel (optionnelle si généré par AI)
-      this.logger.log(`🔍 Vérification finale du contenu...`);
-      
-      const moderationResult = await this.contentModerationService.moderateTextContent(
-        createReelDto.caption,
-        createReelDto.hashtags,
-        createReelDto.categories
+      // 🚀 NOUVELLE MÉTHODE: Analyse directement depuis l'URL (pas de fichier local)
+      videoAnalysis = await this.contentModerationService.analyzeVideoContentFromURL(
+        createReelDto.video_url,
+        'video/mp4'
       );
-
-      this.logger.log(`📊 Résultat modération: ${JSON.stringify(moderationResult)}`);
-
-      // ✅ ÉTAPE 3: Validation finale (moins stricte car basée sur vidéo)
-      // On accepte si la vidéo est food-related, même si le texte a une confiance moyenne
-      const videoApproved = videoAnalysis && videoAnalysis.isApproved;
-      const textReasonable = !moderationResult.isApproved && moderationResult.confidence < 40;
-
-      if (textReasonable && !videoApproved) {
-        // Rejeter seulement si texte vraiment mauvais ET pas de vidéo approuvée
-        this.logger.warn(`❌ Contenu textuel suspect: ${moderationResult.reason}`);
+      
+      this.logger.log(`📊 Analyse vidéo: ${JSON.stringify(videoAnalysis)}`);
+      
+      // ❌ Si la vidéo n'est pas liée à la nourriture, rejeter immédiatement
+      if (!videoAnalysis.isApproved) {
+        this.logger.warn(`❌ Vidéo refusée: ${videoAnalysis.reason}`);
         
         throw new BadRequestException({
-          message: 'Contenu textuel incompatible avec la plateforme culinaire',
-          reason: moderationResult.reason,
-          isFoodRelated: moderationResult.isFoodRelated,
-          confidence: moderationResult.confidence,
-          videoAnalysis: videoAnalysis ? {
-            detectedCategories: videoAnalysis.detectedCategories,
-            detectedDishes: videoAnalysis.detectedDishes,
-          } : null,
+          message: 'Contenu vidéo refusé - Cette vidéo ne semble pas être liée à la nourriture',
+          reason: videoAnalysis.reason,
+          isFoodRelated: videoAnalysis.isFoodRelated,
+          confidence: videoAnalysis.confidence,
+          detectedContent: videoAnalysis.detectedContent,
         });
       }
 
-      // ✅ ÉTAPE 4: Créer le reel
-      this.logger.log(`✅ Contenu approuvé - Création du reel...`);
-      const reel = await this.reelsService.createReel(userId, createReelDto);
-      
-      if (!reel) {
-        throw new Error('Failed to create reel: Service returned no data');
+      // ✅ Enrichir automatiquement les catégories détectées
+      if (videoAnalysis.detectedCategories && videoAnalysis.detectedCategories.length > 0) {
+        // Mapper les catégories françaises vers les enum values MongoDB
+        const mappedCategories = this.mapCategoriesToEnum(videoAnalysis.detectedCategories);
+
+        const allCategories = [
+          ...(createReelDto.categories || []),
+          ...mappedCategories
+        ];
+        createReelDto.categories = [...new Set(allCategories)];
+        
+        this.logger.log(`📂 Catégories mappées: ${videoAnalysis.detectedCategories.join(', ')} → ${mappedCategories.join(', ')}`);
+        this.logger.log(`📂 Catégories finales: ${createReelDto.categories.join(', ')}`);
       }
 
-      return {
-        statusCode: HttpStatus.CREATED,
-        message: 'Reel créé avec succès',
-        data: {
-          ...reel.toObject(),
-          moderation: {
-            approved: true,
-            confidence: videoAnalysis?.confidence || moderationResult.confidence,
-            ai_enhanced: createReelDto.ai_enhanced || false,
-            ai_generated: {
-              caption: createReelDto.ai_caption,
-              hashtags: createReelDto.ai_hashtags,
-            },
-            video_analysis: videoAnalysis ? {
-              detected_categories: videoAnalysis.detectedCategories,
-              detected_dishes: videoAnalysis.detectedDishes,
-              detected_content: videoAnalysis.detectedContent,
-              confidence: videoAnalysis.confidence,
-            } : null,
-          }
-        },
-      };
-
-    } catch (error) {
-      if (error instanceof BadRequestException) {
-        throw error;
-      }
+      // 🆕 GÉNÉRATION AUTOMATIQUE: Caption + Hashtags depuis la vidéo
+      this.logger.log(`🤖 Génération automatique du contenu depuis la vidéo...`);
       
-      this.logger.error(`❌ Erreur création reel: ${error.message}`);
+      // Générer caption basée sur l'analyse vidéo
+      const aiCaption = await this.contentModerationService.generateCaptionFromVideo(
+        videoAnalysis.detectedContent || 'Contenu culinaire détecté',
+        videoAnalysis.detectedDishes,
+        videoAnalysis.detectedCategories
+      );
+      
+      // Générer hashtags optimisés basés sur l'analyse vidéo
+      const aiHashtags = await this.contentModerationService.generateHashtagsFromVideo(
+        videoAnalysis.detectedContent || 'Contenu culinaire',
+        videoAnalysis.detectedCategories,
+        videoAnalysis.detectedDishes
+      );
+
+      // Remplacer ou garder l'original selon si l'utilisateur a fourni du contenu
+      const hasUserCaption = createReelDto.caption && createReelDto.caption.trim().length > 5;
+      const hasUserHashtags = createReelDto.hashtags && createReelDto.hashtags.length > 0;
+
+      if (!hasUserCaption || videoAnalysis.confidence > 85) {
+        // Si pas de caption utilisateur OU vidéo très claire → utiliser AI
+        createReelDto.caption = aiCaption;
+        createReelDto.ai_enhanced = true;
+        createReelDto.ai_caption = aiCaption;
+        this.logger.log(`✨ Caption générée par AI: "${aiCaption}"`);
+      }
+
+      if (!hasUserHashtags || videoAnalysis.confidence > 85) {
+        // Si pas de hashtags utilisateur OU vidéo très claire → utiliser AI
+        createReelDto.hashtags = aiHashtags;
+        createReelDto.ai_hashtags = aiHashtags;
+        this.logger.log(`🏷️ Hashtags générés par AI: ${aiHashtags.join(', ')}`);
+      }
+    }
+
+    // ✅ ÉTAPE 2: Modération du contenu textuel (optionnelle si généré par AI)
+    this.logger.log(`🔍 Vérification finale du contenu...`);
+    
+    const moderationResult = await this.contentModerationService.moderateTextContent(
+      createReelDto.caption,
+      createReelDto.hashtags,
+      createReelDto.categories
+    );
+
+    this.logger.log(`📊 Résultat modération: ${JSON.stringify(moderationResult)}`);
+
+    // ✅ ÉTAPE 3: Validation finale
+    const videoApproved = videoAnalysis && videoAnalysis.isApproved;
+    const textReasonable = !moderationResult.isApproved && moderationResult.confidence < 40;
+
+    if (textReasonable && !videoApproved) {
+      this.logger.warn(`❌ Contenu textuel suspect: ${moderationResult.reason}`);
+      
+      throw new BadRequestException({
+        message: 'Contenu textuel incompatible avec la plateforme culinaire',
+        reason: moderationResult.reason,
+        isFoodRelated: moderationResult.isFoodRelated,
+        confidence: moderationResult.confidence,
+        videoAnalysis: videoAnalysis ? {
+          detectedCategories: videoAnalysis.detectedCategories,
+          detectedDishes: videoAnalysis.detectedDishes,
+        } : null,
+      });
+    }
+
+    // ✅ ÉTAPE 4: Créer le reel
+    this.logger.log(`✅ Contenu approuvé - Création du reel...`);
+    const reel = await this.reelsService.createReel(userId, createReelDto);
+    
+    if (!reel) {
+      throw new Error('Failed to create reel: Service returned no data');
+    }
+
+    return {
+      statusCode: HttpStatus.CREATED,
+      message: 'Reel créé avec succès',
+      data: {
+        ...reel.toObject(),
+        moderation: {
+          approved: true,
+          confidence: videoAnalysis?.confidence || moderationResult.confidence,
+          ai_enhanced: createReelDto.ai_enhanced || false,
+          ai_generated: {
+            caption: createReelDto.ai_caption,
+            hashtags: createReelDto.ai_hashtags,
+          },
+          video_analysis: videoAnalysis ? {
+            detected_categories: videoAnalysis.detectedCategories,
+            detected_dishes: videoAnalysis.detectedDishes,
+            detected_content: videoAnalysis.detectedContent,
+            confidence: videoAnalysis.confidence,
+          } : null,
+        }
+      },
+    };
+
+  } catch (error) {
+    if (error instanceof BadRequestException) {
       throw error;
     }
+    
+    this.logger.error(`❌ Erreur création reel: ${error.message}`);
+    throw error;
   }
+}
 
   // ✅ NOUVELLE ROUTE: Générer caption + hashtags depuis vidéo uniquement
   @Post('generate-content-from-video')
