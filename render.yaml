@@ -4,57 +4,101 @@ services:
     env: node
     region: frankfurt
     plan: free
+    
+    # 🔧 BUILD COMMAND - Optimisé pour 512MB RAM
     buildCommand: |
-      export NODE_OPTIONS="--max-old-space-size=1024"
-      npm ci --omit=dev --prefer-offline --no-audit
+      echo "🚀 Starting optimized build for Render Free Plan (512MB RAM)..."
+      export NODE_OPTIONS="--max-old-space-size=450"
+      npm ci --omit=dev --prefer-offline --no-audit --no-fund
+      npm install --no-save @nestjs/cli typescript rimraf
       npm run build
       npm prune --production
-      rm -rf .npm node_modules/.cache
-    startCommand: node --max-old-space-size=384 dist/main.js
+      rm -rf .npm node_modules/.cache test
+      echo "✅ Build completed successfully!"
+    
+    # 🔧 START COMMAND - 380MB pour laisser de la marge
+    startCommand: node --max-old-space-size=380 dist/main.js
+    
+    # ✅ Health check
     healthCheckPath: /health
+    
+    # ✅ Auto-deploy sur push
     autoDeploy: true
+    
+    # 🌐 ENVIRONMENT VARIABLES
     envVars:
+      # Node Configuration
       - key: NODE_ENV
         value: production
+      
       - key: NODE_OPTIONS
-        value: --max-old-space-size=384
+        value: --max-old-space-size=380
+      
+      # Disable Swagger en production (économie RAM)
       - key: DISABLE_SWAGGER
         value: true
+      
+      # Cloudinary (Public - OK)
       - key: CLOUDINARY_CLOUD_NAME
         value: dg39chhco
+      
       - key: CLOUDINARY_API_KEY
         value: 849123737586636
+      
+      # Cloudinary Secret (À définir dans Dashboard)
       - key: CLOUDINARY_API_SECRET
         sync: false
+      
+      # Database
       - key: MONGODB_URI
         sync: false
+      
+      # JWT
       - key: JWT_SECRET
         sync: false
+      
+      # Gemini AI
       - key: GEMINI_API_KEY
         sync: false
+      
+      # Stripe
       - key: STRIPE_SECRET_KEY
         sync: false
+      
       - key: STRIPE_PUBLISHABLE_KEY
         sync: false
+      
       - key: STRIPE_WEBHOOK_SECRET
         sync: false
+      
       - key: STRIPE_API_VERSION
         value: 2025-11-17.clover
+      
       - key: STRIPE_CURRENCY
         value: usd
+      
       - key: STRIPE_CONNECT_ENABLED
         value: true
+      
       - key: PLATFORM_COMMISSION_PERCENTAGE
         value: 5
+      
+      # Google OAuth
       - key: GOOGLE_CLIENT_ID
         sync: false
+      
       - key: GOOGLE_CLIENT_SECRET
         sync: false
+      
       - key: GOOGLE_CALLBACK_URL
         sync: false
+      
+      # URLs
       - key: FRONTEND_URL
         sync: false
+      
       - key: BACKEND_URL
         sync: false
+      
       - key: CORS_ORIGIN
         sync: false
